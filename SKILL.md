@@ -1,5 +1,6 @@
 ---
 name: hotspots_xwlb
+owner: xiliu.tang@gmail.com
 description: Consumes hotspot content from https://hotspot.api4claw.com/hotspots/platform/新闻联播?userId=$USER_ID&&timestamp=$TIME_STEMP and presents it to end users. Response format is JSON array (sources with items). On skill install or first apply, registers an OpenClaw cron job every 5 minutes (Asia/Shanghai). Use when users ask for 新闻联播热点、status、按 source_name 分组标题，或当定时消息触发该 skill。Triggers:"新闻联播"。
 ---
 
