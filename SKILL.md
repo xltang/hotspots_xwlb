@@ -1,52 +1,52 @@
 ---
-name: hotspots_xwlb
+name: xwlb
 owner: xiliu.tang@gmail.com
-description: Consumes hotspot content from https://hotspot.api4claw.com/hotspots/platform/新闻联播?userId=$USER_ID&&timestamp=$TIME_STEMP and presents it to end users. Response format is JSON array (sources with items). On skill install or first apply, registers an OpenClaw cron job every 5 minutes (Asia/Shanghai). Use when users ask for 新闻联播热点、status、按 source_name 分组标题，或当定时消息触发该 skill。Triggers:"新闻联播"。
+description: 用于拉取并展示「新闻联播」热点（接口为 https://hotspot.api4claw.com/hotspots/platform/新闻联播?timestamp=$TIME_STEMP，返回 JSON 数组）。按 source_name 分组展示标题，无 Top Hot。默认会提示用户是否创建定时任务（不自动执行），在用户确认后提供 cron 注册命令。适用于新闻联播热点、服务状态、按 source_name 分组标题，或由已存在的定时消息触发。触发词："新闻联播"
+required_tools:
+  - web_fetch
+optional_tools:
+  - openclaw
+network_access:
+  - https://hotspot.api4claw.com
+side_effects:
+  - none_by_default
+  - user_approved_optional_cron_setup
 ---
 
-# OpenClaw Hotspot Consumer Skill
+# OpenClaw Hotspot Consumer Skill（新闻联播）
 
-## Installation：安装本 skill 时自动注册定时任务
+## Installation and Setup
 
-**Mandatory：** 用户将本 skill 安装到项目或首次在本对话/会话中启用本 skill 时，**必须立即**完成定时任务注册（不要等用户再说「帮我设定时」）。
+Default mode is stateless and read-only.
 
-1. 先在 OpenClaw 本地生成并持久化 `USER_ID`（若已存在则复用，不重复生成）：
+Do not automatically:
 
-```bash
-mkdir -p ~/.openclaw/hotspots_xwlb
-if [ ! -s ~/.openclaw/hotspots_xwlb/user_id ]; then
-  if command -v uuidgen >/dev/null 2>&1; then
-    uuidgen | tr 'A-Z' 'a-z' > ~/.openclaw/hotspots_xwlb/user_id
-  elif command -v python3 >/dev/null 2>&1; then
-    python3 -c "import uuid; print(uuid.uuid4())" > ~/.openclaw/hotspots_xwlb/user_id
-  else
-    printf "uid-%s-%s\n" "$(date +%s)" "$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 8)" > ~/.openclaw/hotspots_xwlb/user_id
-  fi
-fi
-USER_ID="$(cat ~/.openclaw/hotspots_xwlb/user_id)"
-```
+- write local files
+- generate persistent identifiers (including `user_id`)
+- create/update cron jobs
 
-2. 在终端执行 `openclaw cron list`（或当前 OpenClaw CLI 等价命令），查找是否已有名为 `hotspots-scheduled-shanghai` 的任务。
-3. **若已存在**：向用户简短确认「定时任务已存在」，并回显 `USER_ID=$USER_ID`。
-4. **若不存在**：执行下面的 `openclaw cron add`（仅注册一次）。
+By default, proactively suggest creating a cron job for daily updates. Do not execute commands automatically; provide manual commands and ask for confirmation before execution.
+
+Default prompt template:
+
+- `建议开启定时推送：每天 09:30 (Asia/Shanghai) 自动拉取新闻联播热点。要我为你生成 cron 创建命令吗？（确认后我再给出可复制的命令）`
+
+Optional manual setup example（仅在用户明确同意创建定时任务后给出；由用户自行执行或在你获得授权后执行）:
 
 ```bash
 openclaw cron add \
-  --name "hotspots-scheduled-shanghai" \
+  --name "hotspots-xwlb-scheduled-shanghai" \
   --cron "30 9 * * *" \
   --tz "Asia/Shanghai" \
   --session isolated \
   --agent default \
   --announce \
-  --channel "当前会话的channel（自动替换）" \
-  --to "当前会话的用户ID（自动替换）" \
-  --message '定时执行 hotspots_xwlb skill：请读取 skill「hotspots_xwlb」并按 Consumer Workflow 执行「新闻联播热点」——先确保 USER_ID 已生成，并生成分钟级 TIME_STEMP，再请求 GET https://hotspot.api4claw.com/hotspots/platform/新闻联播?userId=$USER_ID&&timestamp=$TIME_STEMP；按 JSON 解析并直接展示接口内容（按 source_name 分组标题）。'
+  --channel "当前会话的 channel（自动替换）" \
+  --to "当前会话的用户 ID（自动替换）" \
+  --message '定时执行 hotspots_xwlb skill：请读取 skill「hotspots_xwlb」并按 Consumer Workflow 执行「新闻联播热点」——先生成分钟级 TIME_STEMP，再请求 GET https://hotspot.api4claw.com/hotspots/platform/新闻联播?timestamp=$TIME_STEMP；按 JSON 解析并直接展示接口内容（按 source_name 分组标题）。'
 ```
 
-- 默认周期 `30 9 * * *`（每天上午 9:30，时区见 `--tz`）；若用户要求更高频，可改为 `*/30 * * * *` 或 `0 * * * *`。修改时保留同一 `--name` 前先 `cron remove` 再 `add`（以 CLI 实际语法为准）。
-- 注册成功后向用户确认：**已自动设置定时任务**（周期、时区、任务名、`USER_ID=$USER_ID`）。
-
-若 `openclaw` 未安装或命令失败：**不要静默跳过**——说明原因，并给出用户可手动执行的同一条 `cron add` 命令。
+If `openclaw` is unavailable, report setup failure and continue in non-scheduled mode.
 
 ### Prerequisites for scheduled runs
 
@@ -55,11 +55,26 @@ openclaw cron add \
 
 ## Scheduled runs（定时触发时）
 
-当消息为上述 `--message` 内容，或明确要求执行 **hotspots_xwlb** / 新闻联播热点：
+When user-approved scheduling is already configured and a scheduled message triggers this skill, or the user explicitly requests **hotspots_xwlb** / 新闻联播热点:
 
-1. 视为 **新闻联播热点**：先确保 `USER_ID` 已生成，并生成分钟级 `TIME_STEMP`（示例：`TIME_STEMP="$(TZ=Asia/Shanghai date +%Y-%m-%dT%H:%M)"`），再对 `GET https://hotspot.api4claw.com/hotspots/platform/新闻联播?userId=$USER_ID&&timestamp=$TIME_STEMP` 请求一次（除非用户只要 status；定时默认输出完整最新内容），并按 JSON 结构处理。
-2. 遵循本文件 **Output Rules** 与 **Reliability Rules**。
-3. 不因来自自动化而省略步骤；输出应与用户手动「拉取最新热点」一致。
+**⚠️ 每次执行都必须实际调用 API！禁止使用缓存或上次的结果！**
+
+1. **第一步：获取当前时间并报告**
+   - 获取当前北京时间（精确到分钟），保存到 `TIME_STEMP`（示例：`TIME_STEMP="$(TZ=Asia/Shanghai date +%Y-%m-%dT%H:%M)"`）
+   - 输出：`📡 [HH:mm] 正在调用 API: GET https://hotspot.api4claw.com/hotspots/platform/新闻联播?timestamp=$TIME_STEMP`
+
+2. **必须使用 `web_fetch` 工具** 调用上述 URL（`extractMode: "text"`）
+   - ⛔ 禁止假设、禁止缓存、禁止编造数据
+   - ⛔ 禁止跳过 API 调用直接使用旧数据
+
+3. **第二步：报告调用结果**
+   - 成功：输出 `✅ [HH:mm] API 调用成功，获取到 X 个来源，共 Y 条`
+   - 失败：输出 `❌ [HH:mm] API 调用失败：[具体错误原因]`
+
+4. 解析返回的 JSON 数组，按 **Consumer Workflow** 处理
+5. 遵循本文件 **Output Rules** 与 **Reliability Rules**
+
+**🔍 验证要求：** 每次输出的时间戳必须是当前实际时间，如果时间戳与预期不符或重复，说明没有实际调用 API。
 
 ## Scope
 
@@ -67,7 +82,7 @@ This skill is only for Consumer behavior.
 
 Use this skill when users ask to:
 
-- read 新闻联播 hotspot data from `/hotspots/platform/新闻联播?userId=$USER_ID&&timestamp=$TIME_STEMP` (primary: JSON)
+- read 新闻联播 hotspot data from `/hotspots/platform/新闻联播?timestamp=$TIME_STEMP` (primary: JSON)
 - view titles grouped by `source_name`
 - check hotspot service status
 
@@ -81,18 +96,19 @@ Base URL:
 
 Only endpoint:
 
-- `GET /hotspots/platform/新闻联播?userId=$USER_ID&&timestamp=$TIME_STEMP`: fetch 新闻联播 hotspot payload as JSON array. Each element is a source block (e.g. `source`, `source_name`, `fetched_at`, `items[]`), and each item usually includes `title`, `content`, `link`, `hotness`.
+- `GET /hotspots/platform/新闻联播?timestamp=$TIME_STEMP`: 使用 **`web_fetch` 工具**（`extractMode: "text"`）获取 JSON。调用前必须先生成分钟级 `TIME_STEMP`。返回 JSON 数组，每个元素是一个 source block（包含 `source`, `source_name`, `fetched_at`, `items[]`），每个 item 通常包含 `title`, `content`, `link`, `hotness`。
 
 ## Consumer Workflow
 
 For each user intent:
 
 - `新闻联播热点`:
-  1. Ensure `USER_ID` is available locally, then generate minute-level `TIME_STEMP` and call `GET /hotspots/platform/新闻联播?userId=$USER_ID&&timestamp=$TIME_STEMP`.
-  2. If body is JSON array, parse and flatten `items[]` across all sources.
-  3. Group display by `source_name`, showing item titles under each source.
-- `status`: ensure `USER_ID` is available locally, then generate minute-level `TIME_STEMP` and call `GET /hotspots/platform/新闻联播?userId=$USER_ID&&timestamp=$TIME_STEMP`, report reachable/unreachable and basic stats from JSON (source count, total item count). Do NOT show `fetched_at` or `data_date`.
-- `source filter`: filter by `source`/`source_name`.
+  1. 先生成分钟级 `TIME_STEMP`（示例：`TIME_STEMP="$(TZ=Asia/Shanghai date +%Y-%m-%dT%H:%M)"`）
+  2. **使用 `web_fetch` 工具** 调用 `GET https://hotspot.api4claw.com/hotspots/platform/新闻联播?timestamp=$TIME_STEMP`（`extractMode: "text"`）
+  3. 如果返回内容是 JSON 数组，解析并扁平化所有 sources 的 `items[]`
+  4. 按 `source_name` 分组展示 item 标题（不构建 Top、不按预估点击率排序）
+- `status`: 先生成分钟级 `TIME_STEMP`，再 **使用 `web_fetch` 工具** 调用 `GET https://hotspot.api4claw.com/hotspots/platform/新闻联播?timestamp=$TIME_STEMP`，报告可达性 + 基础统计（source 数量、item 总数）。**不要** 展示 `fetched_at` 或 `data_date`
+- `source filter`: 按 `source`/`source_name` 过滤展示
 
 JSON grouping targets (if present):
 
@@ -105,7 +121,11 @@ JSON grouping targets (if present):
 
 Required:
 
-- `HOTSPOT_BASE_URL`: set to `https://hotspot.api4claw.com`.
+- No user identifier is required.
+
+Fixed:
+
+- `HOTSPOT_BASE_URL`: `https://hotspot.api4claw.com` (constant, not configurable).
 
 Recommended defaults:
 
@@ -127,12 +147,12 @@ When showing hotspot content, use this order:
 When showing status:
 
 - reachable or unreachable
-- endpoint used: `/hotspots/platform/新闻联播?userId=$USER_ID&&timestamp=$TIME_STEMP`
+- endpoint used: `/hotspots/platform/新闻联播?timestamp=$TIME_STEMP`
 - Do NOT show `fetched_at` or `data_date`
 
 ## Reliability Rules
 
-- If `/hotspots/platform/新闻联播?userId=$USER_ID&&timestamp=$TIME_STEMP` fails, return explicit failure reason.
+- If `/hotspots/platform/新闻联播?timestamp=$TIME_STEMP` fails, return explicit failure reason.
 - Do not fabricate content when server is unreachable.
 - In JSON mode, skip malformed items safely and continue with valid items; report skipped count briefly if non-zero.
 - If response is not valid JSON, report format mismatch explicitly and stop.
@@ -142,4 +162,5 @@ When showing status:
 ## Security Rules
 
 - Do not expose tokens or secret headers in output.
-- Do not call any hotspot endpoint except `/hotspots/platform/新闻联播?userId=$USER_ID&&timestamp=$TIME_STEMP`.
+- Do not call any hotspot endpoint except `/hotspots/platform/新闻联播?timestamp=$TIME_STEMP`.
+- Do not persist identifiers or create background tasks unless the user explicitly requests and approves it.
