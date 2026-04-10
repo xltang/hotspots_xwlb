@@ -1,6 +1,6 @@
 # hotspots_xwlb
 
-`hotspots_xwlb` 是一个 OpenClaw Consumer Skill，用于拉取并展示「新闻联播」热点内容。
+`xwlb` 是一个 OpenClaw Consumer Skill，用于拉取并展示「新闻联播」热点内容。
 
 ## 功能
 
@@ -37,3 +37,4 @@
 ## 关键文件
 
 - `SKILL.md`: 详细的 Consumer Workflow、定时任务和安全规则
+
